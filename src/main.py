@@ -21,6 +21,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "Food Spoilage Detection API is healthy and model is loaded.",
+        "docs": "/docs"
+    }
+
 # Global model and labels variable
 model = None
 labels = {0: "Fresh", 1: "Rotten"} # Default
