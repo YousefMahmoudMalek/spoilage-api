@@ -1,11 +1,12 @@
+# For Railway or Linux-based deployments to stay under size limits (CPU only)
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 python-multipart
-tensorflow
+tensorflow-cpu
 pillow
 numpy
-pandas
-scikit-learn
 transformers
 torch
 sentencepiece

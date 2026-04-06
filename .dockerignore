@@ -1,0 +1,12 @@
+data/
+dataset/
+venv/
+.git/
+__pycache__/
+*.keras
+!models/spoilage_model.keras
+kaggle.json
+inspect_out.txt
+*.pyc
+*.pyo
+.env
