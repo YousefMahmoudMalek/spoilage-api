@@ -1,67 +1,63 @@
-# Food Spoilage Detection API
+# Food Rescue AI Platform
 
-This project provides a FastAPI server for detecting food spoilage from images, using a MobileNetV2 model.
+This project provides a unified AI API for food spoilage detection and sentiment analysis for food rescue platforms.
+
+## Features
+
+- **Multi-Model Spoilage Detection**: Supports specialized models for different food categories (Bread, Meat, Dairy, Fish, etc.) with automatic fallback to a general model.
+- **Sentiment Analysis**: Zero-shot classification tailored for food rescue interactions (satisfaction, disappointment, urgency, gratitude, frustration, excitement).
+- **Railway Ready**: Pre-configured with a `Procfile` and resource-efficient dependencies for cloud deployment.
 
 ## Prerequisites
 
-- **Python 3.9 - 3.11** (Critical: TensorFlow does not yet support Python 3.12+ or 3.14).
-- CUDA compatible GPU (optional, for faster training).
-- Kaggle API credentials.
+- **Python 3.9 - 3.11** (TensorFlow compatibility).
+- At least 2GB of RAM (for sentiment analysis model).
 
 ## Setup
 
-1.  **Install Python 3.10**: Unfortunately, your current Python 3.14 environment is too new for the required Machine Learning libraries (TensorFlow). Please install Python 3.10 from [python.org](https://www.python.org/downloads/).
-
-2.  **Create a Virtual Environment**:
+1.  **Virtual Environment**:
     ```bash
     py -3.10 -m venv venv
     .\venv\Scripts\activate
     ```
 
-3.  **Install Dependencies**:
+2.  **Install Dependencies**:
     ```bash
     pip install -r requirements.txt
     ```
-    *Note: If you are on standard Python 3.14, `tensorflow` installation will fail.*
 
-4.  **Kaggle Credentials**:
-    - Ensure `kaggle.json` is present in the root directory (it has been created with your provided key).
-    - Or set `KAGGLE_USERNAME` and `KAGGLE_KEY` environment variables.
+## API Usage
 
-## Usage
+### 1. Spoilage Detection
+**Endpoint**: `POST /predict?model_type=general`
+- **Body**: File (Image)
+- **Model Types**: `general`, `bread`, `meat`, `dairy`, `fish`, `produce`.
+- **Logic**: If the specific category model is not found, the `general` model is used automatically.
 
-### 1. Data Pipeline
-Download and organize the datasets:
-```bash
-python scripts/download_datasets.py
-```
-This will download "Fresh and Rotten Fruits" and other datasets to the `dataset/` folder.
+### 2. Sentiment Analysis
+**Endpoint**: `POST /sentiment`
+- **Body**: `{"text": "Your review here"}`
+- **Emotions**:
+  - `satisfaction`: Post-rescue positive outcome.
+  - `disappointment`: Post-rescue negative outcome.
+  - `urgency`: Rescue mindset, expiration pressure.
+  - `gratitude`: Appreciation for saving food.
+  - `frustration`: Process/app friction.
+  - `excitement`: Discovery and deal joy.
 
-### 2. Data Organization
-Organize the downloaded data into "fresh" and "rotten" categories:
-```bash
-python scripts/organize_data.py
-```
+### 3. API Documentation
+Once running, visit `http://localhost:8000/docs` for interactive Swagger documentation.
 
-### 3. Training
-Train the MobileNetV2 model:
-```bash
-python scripts/train.py
-```
-- The model will be saved to `models/spoilage_model.keras`.
-- Class indices will be saved to `models/class_indices.json`.
+## Deployment
 
-### 3. API Server
-Start the FastAPI server:
-```bash
-uvicorn src.main:app --reload
-```
-- API Docs: `http://localhost:8000/docs`
-- Endpoint: `POST /predict` (Upload an image)
+This repository is ready for **Railway.app**:
+1. Connect your GitHub repository.
+2. Railway will automatically detect the `Procfile` and install dependencies.
+3. Ensure you have the `models/` directory with at least `spoilage_model.keras` (tracked) for basic functionality.
 
 ## Project Structure
-- `src/main.py`: FastAPI application.
-- `scripts/train.py`: Training script (MobileNetV2).
-- `scripts/download_datasets.py`: Data download script.
-- `dataset/`: Stores raw and processed data.
-- `models/`: Stores trained models.
+
+- `src/main.py`: FastAPI application with dynamic model loading.
+- `models/`: Stores `.keras` models and `.json` label indices.
+- `scripts/`: Data pipeline and training utilities.
+- `data/`: (Ignored) Raw and organized datasets.

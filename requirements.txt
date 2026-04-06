@@ -4,6 +4,8 @@ python-multipart
 tensorflow
 pillow
 numpy
-kagglehub
 pandas
 scikit-learn
+transformers
+torch
+sentencepiece

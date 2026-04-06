@@ -1,0 +1,41 @@
+Inspecting downloaded datasets:
+
+Dataset: fish-freshness-classification
+  No image directories found.
+
+Dataset: food-freshness-dataset
+  No image directories found.
+
+Dataset: fresh-and-rotten-fruits-and-vegetables
+  No image directories found.
+
+Dataset: fresh-and-spoiled-food-image-dataset
+  dataset\fresh_bread: 205 images
+  dataset\fresh_dairy: 204 images
+  dataset\fresh_fruits: 450 images
+  dataset\fresh_vegetables: 433 images
+  dataset\spoiled_bread: 344 images
+  dataset\spoiled_dairy: 299 images
+  dataset\spoiled_fruits: 289 images
+  dataset\spoiled_vegetables: 491 images
+
+Dataset: fresh-and-stale-classification
+  No image directories found.
+
+Dataset: fresh-and-stale-images-of-fruits-and-vegetables
+  No image directories found.
+
+Dataset: fruits-fresh-and-rotten-for-classification
+  No image directories found.
+
+Dataset: meat-freshness-image-dataset
+  No image directories found.
+
+Dataset: moldy-bread-image-dataset
+  No image directories found.
+
+Dataset: spoiled-food
+  No image directories found.
+
+Dataset: zenodo_meatscan
+  No image directories found.

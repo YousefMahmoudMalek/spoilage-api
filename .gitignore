@@ -7,10 +7,20 @@ venv/
 .env
 
 # Project Specific
+data/
 dataset/
 venv/
 .env
 kaggle.json
+*.keras
+*.json
 !models/spoilage_model.keras
 !models/class_indices.json
+!models/labels_*.json
+!requirements.txt
+!Procfile
+
+# Logs
+*.txt
+!inspect_out.txt
 
