@@ -37,13 +37,14 @@ This project provides a unified AI API for food spoilage detection and sentiment
 ### 2. Sentiment Analysis
 **Endpoint**: `POST /sentiment`
 - **Body**: `{"text": "Your review here"}`
-- **Emotions**:
-  - `satisfaction`: Post-rescue positive outcome.
-  - `disappointment`: Post-rescue negative outcome.
-  - `urgency`: Rescue mindset, expiration pressure.
-  - `gratitude`: Appreciation for saving food.
-  - `frustration`: Process/app friction.
-  - `excitement`: Discovery and deal joy.
+- **Mapped Labels**:
+  - `gratitude`: Ggrateful and satisfied with the food.
+  - `disappointment`: Disappointed with the food quality.
+  - `disgust`: **ALERT** - Food was rotten or a health hazard.
+  - `frustration`: Frustrated with the merchant or pickup experience.
+  - `excitement`: Excited about a great deal or surprising find.
+  - `urgency`: Anxious or urgent about food expiring soon.
+- **Filtering**: Only labels with a confidence score > 0.3 are returned. If no labels exceed this threshold, the API returns `{"labels": [], "neutral": true}`.
 
 ### 3. API Documentation
 Once running, visit `http://localhost:8000/docs` for interactive Swagger documentation.

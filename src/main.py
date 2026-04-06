@@ -13,7 +13,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Food Rescue AI Platform API")
+app = FastAPI(title="Food Rescue Moderation API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +31,25 @@ sentiment_model = None
 # Default labels mapping for spoilage
 DEFAULT_LABELS = {0: "Fresh", 1: "Spoiled"}
 
+# Sentiment specific configuration
+CANDIDATE_LABELS = [
+    "grateful and satisfied with the food",
+    "disappointed with the food quality",
+    "disgusted, food was rotten or a health hazard",
+    "frustrated with the merchant or pickup experience",
+    "excited about a great deal or surprising find",
+    "anxious or urgent about food expiring soon"
+]
+
+LABEL_MAP = {
+    "grateful and satisfied with the food":              "gratitude",
+    "disappointed with the food quality":                "disappointment",
+    "disgusted, food was rotten or a health hazard":     "disgust",
+    "frustrated with the merchant or pickup experience": "frustration",
+    "excited about a great deal or surprising find":     "excitement",
+    "anxious or urgent about food expiring soon":        "urgency"
+}
+
 def load_spoilage_models():
     """Load all trained spoilage models from the models directory."""
     global loaded_models, loaded_labels
@@ -45,6 +64,7 @@ def load_spoilage_models():
     if os.path.exists(general_path):
         try:
             import tensorflow as tf
+            # Load without GPU to save memory if needed
             loaded_models['general'] = tf.keras.models.load_model(general_path)
             logger.info("General spoilage model loaded.")
             
@@ -59,34 +79,13 @@ def load_spoilage_models():
         except Exception as e:
             logger.error(f"Failed to load general model: {e}")
 
-    # Load other category models if present
-    for filename in os.listdir(models_dir):
-        if filename.startswith('spoilage_') and filename.endswith('.keras') and filename != 'spoilage_model.keras':
-            cat = filename.replace('spoilage_', '').replace('.keras', '')
-            model_path = os.path.join(models_dir, filename)
-            try:
-                import tensorflow as tf
-                loaded_models[cat] = tf.keras.models.load_model(model_path)
-                logger.info(f"Category model '{cat}' loaded.")
-                
-                # Check for specific labels
-                labels_path = os.path.join(models_dir, f'labels_{cat}.json')
-                if os.path.exists(labels_path):
-                    with open(labels_path, 'r') as f:
-                        indices = json.load(f)
-                        loaded_labels[cat] = {v: k.capitalize() for k, v in indices.items()}
-                else:
-                    loaded_labels[cat] = DEFAULT_LABELS
-            except Exception as e:
-                logger.error(f"Failed to load category model '{cat}': {e}")
-
 def load_sentiment_classifier():
     """Load the zero-shot sentiment classifier."""
     global sentiment_model
     try:
         from transformers import pipeline
-        # Using a smaller model for better performance on limited hardware (like Railway)
-        model_name = "cross-encoder/nli-deberta-v3-small"
+        # facebook/bart-large-mnli is excellent for zero-shot but large (~1.6GB)
+        model_name = "facebook/bart-large-mnli"
         sentiment_model = pipeline("zero-shot-classification", model=model_name)
         logger.info(f"Sentiment classifier loaded: {model_name}")
     except Exception as e:
@@ -115,7 +114,7 @@ def preprocess_image(image_bytes):
 async def root():
     return {
         "status": "online",
-        "models_loaded": list(loaded_models.keys()),
+        "models": list(loaded_models.keys()),
         "sentiment_ready": sentiment_model is not None,
         "docs": "/docs"
     }
@@ -133,8 +132,8 @@ async def predict(
     
     if used_type not in loaded_models:
         if os.environ.get("MOCK_MODE") == "true":
-            return {"prediction": "Fresh", "confidence": 0.88, "used_model": "mock", "note": "MOCK RESPONSE"}
-        raise HTTPException(status_code=503, detail=f"No spoilage models loaded (Requested: {requested_type})")
+            return {"prediction": "Fresh", "confidence": 0.88, "used_model": "mock"}
+        raise HTTPException(status_code=503, detail=f"No models loaded (Requested: {requested_type})")
 
     model = loaded_models[used_type]
     labels = loaded_labels.get(used_type, DEFAULT_LABELS)
@@ -149,10 +148,15 @@ async def predict(
         predictions = model.predict(processed_image)
         score = predictions[0]
         
-        # Find which index corresponds to 'Rotten' or 'Spoiled'
+        # Determine overall label based on argmax
+        predicted_class_idx = np.argmax(score)
+        label = labels.get(predicted_class_idx, "Unknown")
+        confidence = float(score[predicted_class_idx])
+        
+        # Find which index corresponds to 'Rotten' for spoiled percentage mapping
         spoil_idx = -1
         for idx, lbl in labels.items():
-            if lbl.lower() in ['rotten', 'spoiled', 'bad', 'moldy']:
+            if lbl.lower() in ['rotten', 'spoiled', 'bad']:
                 spoil_idx = idx
                 break
         
@@ -161,18 +165,16 @@ async def predict(
             
         spoiled_percentage = float(score[spoil_idx])
         
-        # Determine overall label based on argmax
-        predicted_class_idx = np.argmax(score)
-        label = labels.get(predicted_class_idx, "Unknown")
-        confidence = float(score[predicted_class_idx])
-        
         return {
             "prediction": label,
             "confidence": round(confidence, 4),
             "spoiled_percentage": round(spoiled_percentage * 100, 2),
             "is_spoiled": spoiled_percentage > 0.5,
-            "model_type_requested": requested_type,
-            "model_type_used": used_type
+            "metadata": {
+                "model_requested": requested_type,
+                "model_used": used_type,
+                "fallback_active": requested_type != used_type
+            }
         }
     except Exception as e:
         logger.error(f"Prediction error: {e}")
@@ -190,18 +192,31 @@ async def sentiment(request: SentimentRequest):
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Empty text provided.")
 
-    labels = ["satisfaction", "disappointment", "urgency", "gratitude", "frustration", "excitement"]
-    
     try:
-        result = sentiment_model(request.text, candidate_labels=labels)
+        # Multi-label classification with threshold logic
+        result = sentiment_model(
+            request.text, 
+            candidate_labels=CANDIDATE_LABELS, 
+            multi_label=True
+        )
         
-        # Format results: list of {label: ..., score: ...} sorted by score
-        scores = [{"label": label, "score": round(score, 4)} for label, score in zip(result["labels"], result["scores"])]
+        # Filter and map labels above 0.3 threshold
+        qualified_sentiments = []
+        for label, score in zip(result["labels"], result["scores"]):
+            if score > 0.3:
+                mapped_id = LABEL_MAP.get(label, "unknown")
+                qualified_sentiments.append({
+                    "id": mapped_id,
+                    "label": label,
+                    "score": round(score, 4)
+                })
+        
+        # Sort by score descending (already sorted by bart by default, but to be safe)
+        qualified_sentiments = sorted(qualified_sentiments, key=lambda x: x["score"], reverse=True)
         
         return {
-            "top_sentiment": result["labels"][0],
-            "confidence": round(result["scores"][0], 4),
-            "all_sentiments": scores,
+            "labels": qualified_sentiments,
+            "neutral": len(qualified_sentiments) == 0,
             "text": request.text
         }
     except Exception as e:
