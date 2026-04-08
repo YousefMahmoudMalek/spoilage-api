@@ -13,7 +13,7 @@ import numpy as np
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Food Rescue Moderation API")
+app = FastAPI(title="Food Rescue Moderation API (ONNX Lite)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,7 +51,7 @@ LABEL_MAP = {
 }
 
 def load_spoilage_models():
-    """Load all trained spoilage models from the models directory."""
+    """Load all trained spoilage models using ONNX Runtime for minimal footprint."""
     global loaded_models, loaded_labels
     models_dir = os.path.join(os.path.dirname(__file__), '..', 'models')
     
@@ -59,32 +59,45 @@ def load_spoilage_models():
         logger.warning(f"Models directory not found at {models_dir}")
         return
 
-    # Try loading the general model first
-    general_path = os.path.join(models_dir, 'spoilage_model.keras')
-    if os.path.exists(general_path):
-        try:
-            import tensorflow as tf
-            # Load without GPU to save memory if needed
-            loaded_models['general'] = tf.keras.models.load_model(general_path)
-            logger.info("General spoilage model loaded.")
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        logger.error("onnxruntime not installed. Spoilage prediction will fail.")
+        return
+
+    # Scan for ONNX models
+    for filename in os.listdir(models_dir):
+        if filename.endswith('.onnx'):
+            # e.g. spoilage_model.onnx or spoilage_bread.onnx
+            is_general = (filename == 'spoilage_model.onnx')
+            cat = 'general' if is_general else filename.replace('spoilage_', '').replace('.onnx', '')
             
-            # Load associated labels if they exist
-            labels_path = os.path.join(models_dir, 'class_indices.json')
-            if os.path.exists(labels_path):
-                with open(labels_path, 'r') as f:
-                    indices = json.load(f)
-                    loaded_labels['general'] = {v: k.capitalize() for k, v in indices.items()}
-            else:
-                loaded_labels['general'] = DEFAULT_LABELS
-        except Exception as e:
-            logger.error(f"Failed to load general model: {e}")
+            model_path = os.path.join(models_dir, filename)
+            try:
+                # Use CPU execution provider for Railway
+                session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
+                loaded_models[cat] = session
+                logger.info(f"ONNX model '{cat}' loaded from {filename}.")
+                
+                # Associated labels
+                label_filename = 'class_indices.json' if is_general else f'labels_{cat}.json'
+                labels_path = os.path.join(models_dir, label_filename)
+                if os.path.exists(labels_path):
+                    with open(labels_path, 'r') as f:
+                        indices = json.load(f)
+                        loaded_labels[cat] = {v: k.capitalize() for k, v in indices.items()}
+                else:
+                    loaded_labels[cat] = DEFAULT_LABELS
+            except Exception as e:
+                logger.error(f"Failed to load ONNX model '{cat}': {e}")
 
 def load_sentiment_classifier():
     """Load the zero-shot sentiment classifier."""
     global sentiment_model
     try:
         from transformers import pipeline
-        # facebook/bart-large-mnli is excellent for zero-shot but large (~1.6GB)
+        # facebook/bart-large-mnli is excellent but large (~1.6GB)
+        # Using a model name here; transformers handles caching.
         model_name = "facebook/bart-large-mnli"
         sentiment_model = pipeline("zero-shot-classification", model=model_name)
         logger.info(f"Sentiment classifier loaded: {model_name}")
@@ -101,7 +114,7 @@ def preprocess_image(image_bytes):
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
         image = image.resize((224, 224))
-        img_array = np.array(image)
+        img_array = np.array(image, dtype=np.float32)
         # MobileNetV2 expects input in range [-1, 1]
         img_array = (img_array / 127.5) - 1.0
         img_array = np.expand_dims(img_array, axis=0)
@@ -114,9 +127,9 @@ def preprocess_image(image_bytes):
 async def root():
     return {
         "status": "online",
-        "models": list(loaded_models.keys()),
-        "sentiment_ready": sentiment_model is not None,
-        "docs": "/docs"
+        "engine": "ONNX Runtime",
+        "spoilage_models": list(loaded_models.keys()),
+        "sentiment_ready": sentiment_model is not None
     }
 
 @app.post("/predict")
@@ -126,16 +139,13 @@ async def predict(
 ):
     global loaded_models, loaded_labels
     
-    # Fallback logic
     requested_type = model_type.lower()
     used_type = requested_type if requested_type in loaded_models else "general"
     
     if used_type not in loaded_models:
-        if os.environ.get("MOCK_MODE") == "true":
-            return {"prediction": "Fresh", "confidence": 0.88, "used_model": "mock"}
-        raise HTTPException(status_code=503, detail=f"No models loaded (Requested: {requested_type})")
+        raise HTTPException(status_code=503, detail="No models loaded.")
 
-    model = loaded_models[used_type]
+    session = loaded_models[used_type]
     labels = loaded_labels.get(used_type, DEFAULT_LABELS)
 
     contents = await file.read()
@@ -145,21 +155,21 @@ async def predict(
         raise HTTPException(status_code=400, detail="Invalid image file.")
 
     try:
-        predictions = model.predict(processed_image)
+        # ONNX Inference
+        input_name = session.get_inputs()[0].name
+        predictions = session.run(None, {input_name: processed_image})[0]
         score = predictions[0]
         
-        # Determine overall label based on argmax
         predicted_class_idx = np.argmax(score)
         label = labels.get(predicted_class_idx, "Unknown")
         confidence = float(score[predicted_class_idx])
         
-        # Find which index corresponds to 'Rotten' for spoiled percentage mapping
+        # Mapping for spoiled percentage
         spoil_idx = -1
         for idx, lbl in labels.items():
             if lbl.lower() in ['rotten', 'spoiled', 'bad']:
                 spoil_idx = idx
                 break
-        
         if spoil_idx == -1:
             spoil_idx = 1 if len(score) > 1 else 0
             
@@ -177,7 +187,7 @@ async def predict(
             }
         }
     except Exception as e:
-        logger.error(f"Prediction error: {e}")
+        logger.error(f"Inference error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class SentimentRequest(BaseModel):
@@ -189,18 +199,9 @@ async def sentiment(request: SentimentRequest):
     if not sentiment_model:
         raise HTTPException(status_code=503, detail="Sentiment model is not loaded.")
 
-    if not request.text.strip():
-        raise HTTPException(status_code=400, detail="Empty text provided.")
-
     try:
-        # Multi-label classification with threshold logic
-        result = sentiment_model(
-            request.text, 
-            candidate_labels=CANDIDATE_LABELS, 
-            multi_label=True
-        )
+        result = sentiment_model(request.text, candidate_labels=CANDIDATE_LABELS, multi_label=True)
         
-        # Filter and map labels above 0.3 threshold
         qualified_sentiments = []
         for label, score in zip(result["labels"], result["scores"]):
             if score > 0.3:
@@ -211,7 +212,6 @@ async def sentiment(request: SentimentRequest):
                     "score": round(score, 4)
                 })
         
-        # Sort by score descending (already sorted by bart by default, but to be safe)
         qualified_sentiments = sorted(qualified_sentiments, key=lambda x: x["score"], reverse=True)
         
         return {
@@ -220,16 +220,8 @@ async def sentiment(request: SentimentRequest):
             "text": request.text
         }
     except Exception as e:
-        logger.error(f"Sentiment analysis error: {e}")
+        logger.error(f"Sentiment error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "ok", 
-        "spoilage_models": list(loaded_models.keys()),
-        "sentiment_loaded": sentiment_model is not None
-    }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

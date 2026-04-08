@@ -1,10 +1,10 @@
-# For Railway or Linux-based deployments to stay under size limits (CPU only)
+# Minimal requirements for ONNX Runtime deployment
 --extra-index-url https://download.pytorch.org/whl/cpu
 
 fastapi
 uvicorn
 python-multipart
-tensorflow-cpu
+onnxruntime
 pillow
 numpy
 transformers
