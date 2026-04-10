@@ -96,7 +96,13 @@ def load_sentiment_classifier():
 @app.on_event("startup")
 async def startup_event():
     load_spoilage_models()
-    load_sentiment_classifier()
+
+def get_sentiment_classifier():
+    """Return the sentiment classifier, loading it on first call (lazy init)."""
+    global sentiment_model
+    if sentiment_model is None:
+        load_sentiment_classifier()
+    return sentiment_model
 
 def preprocess_image(image_bytes):
     try:
@@ -166,10 +172,11 @@ class SentimentRequest(BaseModel):
 @app.post("/sentiment", tags=["Analysis"])
 async def sentiment(request: SentimentRequest):
     """Moderation-focused tagging system. Detects disgust, frustration, and success signals."""
-    if not sentiment_model:
-        raise HTTPException(status_code=503, detail="Moderation engine starting...")
+    classifier = get_sentiment_classifier()
+    if not classifier:
+        raise HTTPException(status_code=503, detail="Moderation engine unavailable.")
 
-    result = sentiment_model(request.text, candidate_labels=CANDIDATE_LABELS, multi_label=True)
+    result = classifier(request.text, candidate_labels=CANDIDATE_LABELS, multi_label=True)
     tags = {LABEL_TO_ID[l]: round(s, 4) for l, s in zip(result["labels"], result["scores"]) if s > 0.3}
     
     return {
