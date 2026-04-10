@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 # Branding
 API_NAME = "Waste2Taste AI API"
 API_METHODOLOGY = (
-    "Spoilage: High-performance MobileNetV2 architecture with dynamic category Fallback. "
-    "Sentiment: Zero-shot DeBERTa-v3 Transformer logic for zero-training moderation signals."
+    "Spoilage: MobileNetV2 with category adaptation. "
+    "Sentiment: Zero-shot DeBERTa-v3 Moderation tagging."
 )
 
 app = FastAPI(
     title=API_NAME,
-    description="Unified API for Food Spoilage Detection and Multi-Tag Sentiment Moderation.",
+    description="Intelligent moderation and spoilage detection for food rescue operations.",
 )
 
 app.add_middleware(
@@ -38,17 +38,18 @@ loaded_models = {}
 loaded_labels = {}
 sentiment_model = None
 
-# Spoilage Defaults
+# Support predefined categories for future-proofing
+SPOILAGE_CATEGORIES = ["general", "bread", "meat", "dairy", "fish", "produce", "prepared_meals"]
 DEFAULT_LABELS = {0: "Fresh", 1: "Spoiled"}
 
-# Sentiment/Moderation Configuration
+# High-Precision Moderation Labels
 SENTIMENT_DEFINITIONS = {
-    "gratitude":      "grateful and satisfied with the food",
-    "disappointment": "disappointed with the food quality",
-    "disgust":         "disgusted, food was rotten or a health hazard",
-    "frustration":     "frustrated with the merchant or pickup experience",
-    "excitement":      "excited about a great deal or surprising find",
-    "urgency":         "anxious or urgent about food expiring soon"
+    "gratitude":      "grateful, happy and satisfied with the food",
+    "disappointment": "disappointed with the food quality or quantity",
+    "disgust":         "disgusted, food was rotten, moldy, or a health safety hazard",
+    "frustration":     "frustrated with the merchant, pickup experience, or store being closed",
+    "excitement":      "excited about an amazing deal or massive surprise find",
+    "urgency":         "anxious or urgent about food expiring extremely soon"
 }
 
 LABEL_TO_ID = {v: k for k, v in SENTIMENT_DEFINITIONS.items()}
@@ -109,31 +110,29 @@ def preprocess_image(image_bytes):
 
 @app.get("/", tags=["Info"])
 async def index():
-    """Service status and capability discovery."""
+    """Service discovery for frontend/app integration."""
     return {
         "status": "online",
         "api": API_NAME,
         "methodology": API_METHODOLOGY,
-        "spoilage_models": list(loaded_models.keys()),
-        "sentiment_config": {
-            "model": "DeBERTa-v3-Lite",
-            "active_labels": SENTIMENT_DEFINITIONS
-        },
+        "supported_categories": SPOILAGE_CATEGORIES,
+        "loaded_models": list(loaded_models.keys()),
+        "moderation_tags": SENTIMENT_DEFINITIONS,
         "docs": "/docs"
     }
 
 @app.post("/predict", tags=["Analysis"])
 async def predict(
     file: UploadFile = File(...), 
-    type: str = Query("general", description="Category (bread, meat, dairy, fish, produce)")
+    type: str = Query("general", description="Category: bread, meat, dairy, fish, produce, prepared_meals")
 ):
-    """Detect spoilage using the specified category model."""
+    """Detect spoilage/rottenness. Categories not yet trained will use the 'general' fallback."""
     global loaded_models, loaded_labels
     req_type = type.lower()
     used_type = req_type if req_type in loaded_models else "general"
     
     if used_type not in loaded_models:
-        raise HTTPException(status_code=503, detail="No models loaded.")
+        raise HTTPException(status_code=503, detail="Base model loading...")
 
     session = loaded_models[used_type]
     labels = loaded_labels.get(used_type, DEFAULT_LABELS)
@@ -141,13 +140,13 @@ async def predict(
     contents = await file.read()
     processed_image = preprocess_image(contents)
     if processed_image is None:
-        raise HTTPException(status_code=400, detail="Invalid image.")
+        raise HTTPException(status_code=400, detail="Invalid image data.")
 
     predictions = session.run(None, {session.get_inputs()[0].name: processed_image})[0]
     score = predictions[0]
     idx = np.argmax(score)
     
-    spoil_idx = 1 # Fallback
+    spoil_idx = 1
     for i, lbl in labels.items():
         if lbl.lower() in ['rotten', 'spoiled', 'bad']:
             spoil_idx = i
@@ -158,7 +157,7 @@ async def predict(
         "confidence": round(float(score[idx]), 4),
         "spoiled_percentage": round(float(score[spoil_idx]) * 100, 2),
         "is_spoiled": float(score[spoil_idx]) > 0.5,
-        "metadata": {"requested": req_type, "used": used_type}
+        "metadata": {"requested": req_type, "used": used_type, "fallback": req_type != used_type}
     }
 
 class SentimentRequest(BaseModel):
@@ -166,17 +165,12 @@ class SentimentRequest(BaseModel):
 
 @app.post("/sentiment", tags=["Analysis"])
 async def sentiment(request: SentimentRequest):
-    """Multi-tagging sentiment analysis. Returns fired tags (>0.3 score)."""
+    """Moderation-focused tagging system. Detects disgust, frustration, and success signals."""
     if not sentiment_model:
-        raise HTTPException(status_code=503, detail="Model offline.")
+        raise HTTPException(status_code=503, detail="Moderation engine starting...")
 
     result = sentiment_model(request.text, candidate_labels=CANDIDATE_LABELS, multi_label=True)
-    
-    # Tag-based response (multiple tags supported)
-    tags = {}
-    for l, s in zip(result["labels"], result["scores"]):
-        if s > 0.3:
-            tags[LABEL_TO_ID[l]] = round(s, 4)
+    tags = {LABEL_TO_ID[l]: round(s, 4) for l, s in zip(result["labels"], result["scores"]) if s > 0.3}
     
     return {
         "tags": tags,
