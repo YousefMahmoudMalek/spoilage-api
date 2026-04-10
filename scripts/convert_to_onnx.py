@@ -2,26 +2,36 @@ import os
 import tensorflow as tf
 import tf2onnx
 import onnx
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def convert_to_onnx(model_path, output_path):
     if not os.path.exists(model_path):
-        print(f"Model {model_path} not found.")
+        logger.warning(f"Model {model_path} not found.")
         return
 
-    print(f"Loading Keras model from {model_path}...")
+    logger.info(f"Loading Keras model from {model_path}...")
     model = tf.keras.models.load_model(model_path)
     
     spec = (tf.TensorSpec((None, 224, 224, 3), tf.float32, name="input"),)
     
-    print("Converting to ONNX...")
+    logger.info("Converting to ONNX...")
     model_proto, _ = tf2onnx.convert.from_keras(model, input_signature=spec, opset=13)
     
     onnx.save(model_proto, output_path)
-    print(f"Model saved to {output_path}")
+    logger.info(f"Model saved to {output_path}")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    model_path = os.path.join(base_dir, 'models', 'spoilage_model.keras')
-    output_path = os.path.join(base_dir, 'models', 'spoilage_model.onnx')
+    models_dir = os.path.join(base_dir, 'models')
     
-    convert_to_onnx(model_path, output_path)
+    for filename in os.listdir(models_dir):
+        if filename.endswith('.keras'):
+            model_path = os.path.join(models_dir, filename)
+            output_path = model_path.replace('.keras', '.onnx')
+            if not os.path.exists(output_path):
+                convert_to_onnx(model_path, output_path)
+            else:
+                logger.info(f"ONNX version of {filename} already exists. Skipping.")

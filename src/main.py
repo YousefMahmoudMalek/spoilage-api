@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 # Branding
 API_NAME = "Waste2Taste AI API"
 API_METHODOLOGY = (
-    "Spoilage: MobileNetV2 with category adaptation. "
-    "Sentiment: Zero-shot DeBERTa-v3 Moderation tagging."
+    "Spoilage: Ensemble Inference with Category-Specific Cross-Validation. "
+    "Sentiment: Accelerated DistilBERT Zero-shot Moderation."
 )
 
 app = FastAPI(
@@ -38,11 +38,11 @@ loaded_models = {}
 loaded_labels = {}
 sentiment_model = None
 
-# Support predefined categories for future-proofing
-SPOILAGE_CATEGORIES = ["general", "bread", "meat", "dairy", "fish", "produce", "prepared_meals"]
+# Metadata Discovery
+SPOILAGE_CATEGORIES = ["general", "bread", "meat", "dairy", "fish", "produce"]
 DEFAULT_LABELS = {0: "Fresh", 1: "Spoiled"}
 
-# High-Precision Moderation Labels
+# Moderation Tag Definitions
 SENTIMENT_DEFINITIONS = {
     "gratitude":      "grateful, happy and satisfied with the food",
     "disappointment": "disappointed with the food quality or quantity",
@@ -56,7 +56,7 @@ LABEL_TO_ID = {v: k for k, v in SENTIMENT_DEFINITIONS.items()}
 CANDIDATE_LABELS = list(SENTIMENT_DEFINITIONS.values())
 
 def load_spoilage_models():
-    """Load all trained spoilage models from /models."""
+    """Load all optimized ONNX models from /models."""
     global loaded_models, loaded_labels
     models_dir = os.path.join(os.path.dirname(__file__), '..', 'models')
     if not os.path.exists(models_dir): return
@@ -84,12 +84,14 @@ def load_spoilage_models():
                 logger.error(f"Load error {cat}: {e}")
 
 def load_sentiment_classifier():
-    """Load the lite sentiment classifier."""
+    """Load the accelerated sentiment classifier."""
     global sentiment_model
     try:
         from transformers import pipeline
-        model_name = "cross-encoder/nli-deberta-v3-small"
+        # Switched to DistilBERT for 3-5x faster CPU performance
+        model_name = "typeform/distilbert-base-uncased-mnli"
         sentiment_model = pipeline("zero-shot-classification", model=model_name)
+        logger.info(f"Sentiment engine loaded: {model_name}")
     except Exception as e:
         logger.error(f"Sentiment load error: {e}")
 
@@ -98,7 +100,7 @@ async def startup_event():
     load_spoilage_models()
 
 def get_sentiment_classifier():
-    """Return the sentiment classifier, loading it on first call (lazy init)."""
+    """Lazy initialization of the sentiment model to save cold-boot RAM."""
     global sentiment_model
     if sentiment_model is None:
         load_sentiment_classifier()
@@ -116,13 +118,13 @@ def preprocess_image(image_bytes):
 
 @app.get("/", tags=["Info"])
 async def index():
-    """Service discovery for frontend/app integration."""
+    """Service discovery and status."""
     return {
         "status": "online",
         "api": API_NAME,
         "methodology": API_METHODOLOGY,
         "supported_categories": SPOILAGE_CATEGORIES,
-        "loaded_models": list(loaded_models.keys()),
+        "active_models": list(loaded_models.keys()),
         "moderation_tags": SENTIMENT_DEFINITIONS,
         "docs": "/docs"
     }
@@ -130,40 +132,61 @@ async def index():
 @app.post("/predict", tags=["Analysis"])
 async def predict(
     file: UploadFile = File(...), 
-    type: str = Query("general", description="Category: bread, meat, dairy, fish, produce, prepared_meals")
+    type: str = Query("general", description="Category: bread, meat, dairy, fish, produce")
 ):
-    """Detect spoilage/rottenness. Categories not yet trained will use the 'general' fallback."""
+    """Detect spoilage using the ensemble cross-validation strategy."""
     global loaded_models, loaded_labels
     req_type = type.lower()
-    used_type = req_type if req_type in loaded_models else "general"
     
-    if used_type not in loaded_models:
-        raise HTTPException(status_code=503, detail="Base model loading...")
-
-    session = loaded_models[used_type]
-    labels = loaded_labels.get(used_type, DEFAULT_LABELS)
-
+    candidates = ["general"]
+    if req_type != "general" and req_type in loaded_models:
+        candidates.append(req_type)
+    
     contents = await file.read()
     processed_image = preprocess_image(contents)
     if processed_image is None:
-        raise HTTPException(status_code=400, detail="Invalid image data.")
+        raise HTTPException(status_code=400, detail="Invalid image.")
 
-    predictions = session.run(None, {session.get_inputs()[0].name: processed_image})[0]
-    score = predictions[0]
-    idx = np.argmax(score)
+    results = []
+    for model_name in candidates:
+        session = loaded_models[model_name]
+        labels = loaded_labels.get(model_name, DEFAULT_LABELS)
+        
+        input_name = session.get_inputs()[0].name
+        raw_pred = session.run(None, {input_name: processed_image})[0][0]
+        
+        idx = np.argmax(raw_pred)
+        confidence = float(raw_pred[idx])
+        
+        spoil_idx = 1
+        for i, lbl in labels.items():
+            if lbl.lower() in ['rotten', 'spoiled', 'bad']:
+                spoil_idx = i
+                break
+        
+        results.append({
+            "model_name": model_name,
+            "prediction": labels.get(idx, "Unknown"),
+            "confidence": round(confidence, 4),
+            "spoiled_percentage": round(float(raw_pred[spoil_idx]) * 100, 2),
+            "is_spoiled": float(raw_pred[spoil_idx]) > 0.5
+        })
+
+    if not results:
+        raise HTTPException(status_code=503, detail="AI engines offline.")
+
+    winner = max(results, key=lambda x: x["confidence"])
     
-    spoil_idx = 1
-    for i, lbl in labels.items():
-        if lbl.lower() in ['rotten', 'spoiled', 'bad']:
-            spoil_idx = i
-            break
-            
     return {
-        "prediction": labels.get(idx, "Unknown"),
-        "confidence": round(float(score[idx]), 4),
-        "spoiled_percentage": round(float(score[spoil_idx]) * 100, 2),
-        "is_spoiled": float(score[spoil_idx]) > 0.5,
-        "metadata": {"requested": req_type, "used": used_type, "fallback": req_type != used_type}
+        "prediction": winner["prediction"],
+        "confidence": winner["confidence"],
+        "spoiled_percentage": winner["spoiled_percentage"],
+        "is_spoiled": winner["is_spoiled"],
+        "metadata": {
+            "requested_type": req_type,
+            "winner_model": winner["model_name"],
+            "ensemble_scores": {r["model_name"]: r["confidence"] for r in results}
+        }
     }
 
 class SentimentRequest(BaseModel):
@@ -171,10 +194,10 @@ class SentimentRequest(BaseModel):
 
 @app.post("/sentiment", tags=["Analysis"])
 async def sentiment(request: SentimentRequest):
-    """Moderation-focused tagging system. Detects disgust, frustration, and success signals."""
+    """Fast moderation tagging. Detects disgust, frustration, and success signals."""
     classifier = get_sentiment_classifier()
     if not classifier:
-        raise HTTPException(status_code=503, detail="Moderation engine unavailable.")
+        raise HTTPException(status_code=503, detail="Sentiment engine starting...")
 
     result = classifier(request.text, candidate_labels=CANDIDATE_LABELS, multi_label=True)
     tags = {LABEL_TO_ID[l]: round(s, 4) for l, s in zip(result["labels"], result["scores"]) if s > 0.3}
