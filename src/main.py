@@ -158,12 +158,17 @@ async def predict(
         idx = np.argmax(raw_pred)
         confidence = float(raw_pred[idx])
         
-        spoil_idx = 1
+        # Default to the last index (Spoiled class in a binary Fresh/Spoiled model).
+        # Fall back to index 1, but never exceed the actual output size.
+        default_spoil_idx = min(1, len(raw_pred) - 1)
+        spoil_idx = default_spoil_idx
         for i, lbl in labels.items():
             if lbl.lower() in ['rotten', 'spoiled', 'bad']:
-                spoil_idx = i
+                candidate = int(i)  # keys may be str or int after JSON round-trip
+                if 0 <= candidate < len(raw_pred):
+                    spoil_idx = candidate
                 break
-        
+
         results.append({
             "model_name": model_name,
             "prediction": labels.get(idx, "Unknown"),
