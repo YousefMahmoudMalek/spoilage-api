@@ -6,7 +6,7 @@ from transformers import pipeline
 
 def evaluate_sentiment():
     print("Loading sentiment engine...")
-    model_name = "typeform/distilbert-base-uncased-mnli"
+    model_name = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
     
     # Measure load time
     load_start = time.perf_counter()
@@ -27,16 +27,19 @@ def evaluate_sentiment():
     
     test_data = [
         ("Thank you so much! The food is perfectly fresh and we are very happy.", "gratitude"),
+        ("شكرا جزيلا! الطعام طازج تمامًا ونحن سعداء جدًا.", "gratitude"),
         ("The bread was completely moldy and disgusting, it's a huge health hazard.", "disgust"),
+        ("كان الخبز متعفنًا ومقرفًا تمامًا، إنه خطر صحي كبير.", "disgust"),
         ("I showed up at the store but it was already closed, very frustrating experience.", "frustration"),
+        ("ذهبت إلى المتجر ولكنه كان مغلقًا بالفعل، تجربة محبطة للغاية.", "frustration"),
         ("Wow, what an incredible find! We got so much food for such a great price.", "excitement"),
+        ("يا للروعة، ياله من اكتشاف مذهل! حصلنا على الكثير من الطعام بسعر رائع.", "excitement"),
         ("This milk expires tomorrow, we need to pick it up urgently before it goes bad.", "urgency"),
+        ("ينتهي تاريخ صلاحية هذا الحليب غدًا، نحتاج إلى استلامه بشكل عاجل قبل أن يفسد.", "urgency"),
         ("A bit disappointed with the portion sizes, expected a bit more.", "disappointment"),
-        ("Everything was rotten and smelled terrible, I had to throw it away immediately.", "disgust"),
-        ("The staff was super helpful and we got everything we needed, so grateful.", "gratitude"),
-        ("I'm worried this meat will go bad soon, we must distribute it today.", "urgency"),
-        ("The food rescue was a success, thank you team!", "gratitude")
+        ("أشعر بخيبة أمل قليلاً من حجم الحصص، كنت أتوقع أكثر من ذلك بقليل.", "disappointment")
     ]
+
     
     # Cold start test
     cold_start_time = time.perf_counter()
@@ -70,25 +73,32 @@ def evaluate_sentiment():
     accuracy = (correct / total) * 100
     
     report = f"""
-### Sentiment & Moderation Analysis
+### Sentiment & Moderation Analysis (mDeBERTa)
 | Metric | Value |
 | :--- | :--- |
-| **Model** | `distilbert-base-uncased-mnli` |
+| **Model** | `{model_name}` |
 | **Accuracy (Top-1)** | {accuracy:.1f}% |
 | **Avg Latency** | {avg_latency:.2f} ms |
 | **P95 Latency** | {p95_latency:.2f} ms |
 | **Cold Start (1st Inf)** | {cold_ms:.2f} ms |
 | **Model Load Time** | {load_time_ms:.2f} ms |
 | **Samples Tested** | {total} |
+
+#### Sample Evaluation
+| Text | Expected Label |
+| :--- | :--- |
+| Thank you so much! The food is perfectly fresh and we are very happy. | gratitude |
+| شكرا جزيلا! الطعام طازج تمامًا ونحن سعداء جدًا. | gratitude |
+| The bread was completely moldy and disgusting, it's a huge health hazard. | disgust |
+| كان الخبز متعفنًا ومقرفًا تمامًا، إنه خطر صحي كبير. | disgust |
 """
     
     output_file = os.path.join(os.path.dirname(__file__), '..', 'analysis.md')
     
     # Append to report
-    with open(output_file, 'a') as f:
+    with open(output_file, 'a', encoding='utf-8') as f:
         f.write("\n" + report)
         
-    print(report)
     print(f"Detailed analysis saved to {output_file}")
 
 if __name__ == "__main__":

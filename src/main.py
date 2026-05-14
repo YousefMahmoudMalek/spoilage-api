@@ -8,6 +8,7 @@ import json
 import logging
 from PIL import Image
 import numpy as np
+from fastapi.staticfiles import StaticFiles
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,9 @@ app = FastAPI(
     title=API_NAME,
     description="Intelligent moderation and spoilage detection for food rescue operations.",
 )
+
+# Mount the test directory so the images are accessible in the Swagger UI
+app.mount("/test", StaticFiles(directory=os.path.join(os.path.dirname(__file__), '..', 'test')), name="test")
 
 app.add_middleware(
     CORSMiddleware,
@@ -88,8 +92,8 @@ def load_sentiment_classifier():
     global sentiment_model
     try:
         from transformers import pipeline
-        # Switched to DistilBERT for 3-5x faster CPU performance
-        model_name = "typeform/distilbert-base-uncased-mnli"
+        # Switched to mDeBERTa for multilingual support (including Arabic)
+        model_name = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
         sentiment_model = pipeline("zero-shot-classification", model=model_name)
         logger.info(f"Sentiment engine loaded: {model_name}")
     except Exception as e:
@@ -134,7 +138,17 @@ async def predict(
     file: UploadFile = File(...), 
     type: str = Query("general", description="Category: bread, meat, dairy, fish, produce")
 ):
-    """Detect spoilage using the ensemble cross-validation strategy."""
+    """
+    Detect spoilage using the ensemble cross-validation strategy.
+    
+    ### 🧪 Test Images
+    *Right-click and 'Save Image As' to download an image, then upload it below!*
+    
+    - **Produce:** [Fresh](/test/sample_produce_fresh_0.jpg) | [Spoiled](/test/sample_produce_spoiled_2.jpg)
+    - **Meat:** [Fresh](/test/sample_meat_fresh_4.jpg) | [Spoiled](/test/sample_meat_spoiled_6.jpg)
+    - **Dairy:** [Fresh](/test/sample_dairy_fresh_8.jpg) | [Spoiled](/test/sample_dairy_spoiled_10.jpg)
+    - **Bread:** [Fresh](/test/sample_bread_fresh_12.jpg) | [Spoiled](/test/sample_bread_spoiled_14.jpg)
+    """
     global loaded_models, loaded_labels
     req_type = type.lower()
     
