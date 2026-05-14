@@ -28,10 +28,7 @@ if __name__ == "__main__":
     models_dir = os.path.join(base_dir, 'models')
     
     for filename in os.listdir(models_dir):
-        if filename.endswith('.keras'):
+        if filename.endswith(('.keras', '.h5')):
             model_path = os.path.join(models_dir, filename)
-            output_path = model_path.replace('.keras', '.onnx')
-            if not os.path.exists(output_path):
-                convert_to_onnx(model_path, output_path)
-            else:
-                logger.info(f"ONNX version of {filename} already exists. Skipping.")
+            output_path = model_path.replace('.keras', '.onnx').replace('.h5', '.onnx')
+            convert_to_onnx(model_path, output_path)

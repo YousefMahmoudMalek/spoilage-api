@@ -1,4 +1,3 @@
-
 # Python
 __pycache__/
 *.py[cod]
@@ -12,15 +11,20 @@ dataset/
 venv/
 .env
 kaggle.json
+
+# Ignore raw/training models and legacy backups
 *.keras
-*.json
-!models/spoilage_model.keras
-!models/class_indices.json
-!models/labels_*.json
+*.h5
+models/legacy/
+
+# Ensure ONNX production models and their labels ARE tracked for Railway
+!models/*.onnx
+!models/*.json
+
 !requirements.txt
 !Procfile
 
-# Logs
+# Logs & docs
 *.txt
 !inspect_out.txt
-
+analysis.md

@@ -11,8 +11,9 @@ DATASET_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dataset'
 # Datasets to download
 # Format: (dataset_handle, target_folder_name)
 DATASETS = [
-    ("sriramr/fruits-fresh-and-rotten-for-classification", "raw_fruits"),
-    ("muhraka/fruit-and-vegetable-disease-healthy-vs-rotten", "raw_veg_disease")
+    ("vinayakshanawad/meat-freshness-image-dataset", "meat-freshness"),
+    ("kamathsan/fish-freshness-dataset", "fish-freshness"),
+    ("jocelyndumlao/good-and-bad-classification-of-egg-bread-toast", "bread-toast")
 ]
 
 def load_kaggle_credentials():
@@ -61,6 +62,11 @@ def main():
     os.makedirs(DATASET_DIR, exist_ok=True)
 
     for handle, name in DATASETS:
+        target_path = os.path.join(DATASET_DIR, name)
+        if os.path.exists(target_path):
+            print(f"Dataset {name} already exists. Skipping.")
+            continue
+            
         try:
             print(f"Downloading {handle}...")
             path = kagglehub.dataset_download(handle)
