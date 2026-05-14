@@ -27,7 +27,9 @@ app = FastAPI(
 )
 
 # Mount the test directory so the images are accessible in the Swagger UI
-app.mount("/test", StaticFiles(directory=os.path.join(os.path.dirname(__file__), '..', 'test')), name="test")
+test_dir = os.path.join(os.path.dirname(__file__), '..', 'test')
+if os.path.exists(test_dir):
+    app.mount("/test", StaticFiles(directory=test_dir), name="test")
 
 app.add_middleware(
     CORSMiddleware,
