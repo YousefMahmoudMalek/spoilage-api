@@ -19,12 +19,9 @@ COPY requirements.txt .
 # Use cpu version of torch if still in requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy only the necessary application folders
-# This EXPLICITLY skips data/ and dataset/ which were causing the 7GB bloat
-COPY src/ ./src/
-COPY models/ ./models/
-COPY scripts/ ./scripts/
-# COPY test/ ./test/  # Removed to prevent build errors and reduce image size
+# Copy all application files
+# honors .dockerignore to EXPLICITLY skip data/, dataset/, and venv/
+COPY . .
 
 # Expose port
 EXPOSE 8080

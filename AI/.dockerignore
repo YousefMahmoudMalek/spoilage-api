@@ -9,4 +9,11 @@ kaggle.json
 inspect_out.txt
 *.pyc
 *.pyo
+test/
 .env
+.gitignore
+README.md
+analysis.md
+kaggle.json
+Procfile
+Dockerfile
