@@ -26,10 +26,7 @@ app = FastAPI(
     description="Intelligent moderation and spoilage detection for food rescue operations.",
 )
 
-# Mount the test directory so the images are accessible in the Swagger UI
-test_dir = os.path.join(os.path.dirname(__file__), '..', 'test')
-if os.path.exists(test_dir):
-    app.mount("/test", StaticFiles(directory=test_dir), name="test")
+# Test directory logic removed as requested
 
 app.add_middleware(
     CORSMiddleware,
@@ -143,13 +140,7 @@ async def predict(
     """
     Detect spoilage using the ensemble cross-validation strategy.
     
-    ### 🧪 Test Images
-    *Right-click and 'Save Image As' to download an image, then upload it below!*
-    
-    - **Produce:** [Fresh](/test/sample_produce_fresh_0.jpg) | [Spoiled](/test/sample_produce_spoiled_2.jpg)
-    - **Meat:** [Fresh](/test/sample_meat_fresh_4.jpg) | [Spoiled](/test/sample_meat_spoiled_6.jpg)
-    - **Dairy:** [Fresh](/test/sample_dairy_fresh_8.jpg) | [Spoiled](/test/sample_dairy_spoiled_10.jpg)
-    - **Bread:** [Fresh](/test/sample_bread_fresh_12.jpg) | [Spoiled](/test/sample_bread_spoiled_14.jpg)
+    Select a category (bread, meat, dairy, fish, produce) and upload an image for analysis.
     """
     global loaded_models, loaded_labels
     req_type = type.lower()

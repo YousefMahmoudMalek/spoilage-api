@@ -18,8 +18,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # --- Configuration ---
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-DATA_DIR = os.path.join(BASE_DIR, 'data', 'organized_new')
-TEST_DIR = os.path.join(BASE_DIR, 'data', 'test_split')
+DATA_DIR = os.path.join(BASE_DIR, 'data', 'training')
+TEST_DIR = os.path.join(BASE_DIR, 'data', 'evaluation')
 MODELS_DIR = os.path.join(BASE_DIR, 'models')
 IMAGE_SIZE = (224, 224)
 BATCH_SIZE = 32

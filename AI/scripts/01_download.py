@@ -8,12 +8,13 @@ import pathlib
 KAGGLE_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'kaggle.json')
 DATASET_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dataset')
 
-# Datasets to download
+# Datasets to download (Synced with data/notes.md)
 # Format: (dataset_handle, target_folder_name)
 DATASETS = [
-    ("vinayakshanawad/meat-freshness-image-dataset", "meat-freshness"),
-    ("kamathsan/fish-freshness-dataset", "fish-freshness"),
-    ("jocelyndumlao/good-and-bad-classification-of-egg-bread-toast", "bread-toast")
+    ("sriramr/fruits-fresh-and-rotten-for-classification", "raw_fruits"),
+    ("nirmalsankalana/food-freshness-dataset", "food-freshness-dataset"),
+    ("crowww/meat-quality-assessment-based-on-deep-learning", "meat-quality"),
+    # Note: fresh-and-spoiled-food-image-dataset is a direct download and not available via Kaggle API
 ]
 
 def load_kaggle_credentials():

@@ -20,8 +20,8 @@ def preprocess_image(image_path):
 
 def main():
     models_dir = os.path.join(os.path.dirname(__file__), '..', 'models')
-    test_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'test_split')
-    organized_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'organized_new')
+    test_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'evaluation')
+    organized_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'training')
     output_file = os.path.join(os.path.dirname(__file__), '..', 'analysis.md')
 
     if not os.path.exists(models_dir) or not os.path.exists(test_dir):

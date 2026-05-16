@@ -6,8 +6,9 @@ import json
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_DIRS = [
     os.path.join(BASE_DIR, 'data', 'raw'),
+    os.path.join(BASE_DIR, 'dataset'),
 ]
-ORG_DIR = os.path.join(BASE_DIR, 'data', 'organized_new')
+ORG_DIR = os.path.join(BASE_DIR, 'data', 'training')
 
 # Categories and States
 CATEGORIES = ['bread', 'dairy', 'produce', 'meat', 'fish', 'general']

@@ -32,7 +32,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python test_api.py <path_to_image>")
         # Try to find a sample image in the dataset to make it easier
-        sample_path = "dataset/processed/train/rotten"
+        sample_path = "data/training/general/fresh"
         if os.path.exists(sample_path):
             samples = [os.path.join(sample_path, f) for f in os.listdir(sample_path) if f.endswith(('.jpg', '.png'))]
             if samples:
