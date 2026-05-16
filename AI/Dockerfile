@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY models/ ./models/
 COPY scripts/ ./scripts/
-COPY test/ ./test/
+# COPY test/ ./test/  # Removed to prevent build errors and reduce image size
 
 # Expose port
 EXPOSE 8080
